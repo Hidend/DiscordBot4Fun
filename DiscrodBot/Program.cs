@@ -7,6 +7,7 @@ using Discord.WebSocket;
 using Discord.Commands;
 using DiscordBot.Services;
 using Microsoft.Extensions.Configuration;
+using Serilog;
 
 namespace DiscordBot
 {
@@ -22,31 +23,27 @@ namespace DiscordBot
         }
 
         static void Main(string[] args)
-            => new Program(args).MainAsync().GetAwaiter().GetResult();
+        {
+            Log.Logger = new LoggerConfiguration()
+                .WriteTo.Console()
+                .CreateLogger();
+            new Program(args).MainAsync().GetAwaiter().GetResult();
+        }
 
         public async Task MainAsync()
         {
             using (var services = ConfigureServices())
             {
                 var client = services.GetRequiredService<DiscordSocketClient>();
+                services.GetRequiredService<LoggingService>();
 
-                client.Log += LogAsync;
-                services.GetRequiredService<CommandService>().Log += LogAsync;
-
-                await client.LoginAsync(TokenType.Bot, Environment.GetEnvironmentVariable("token"));
+                await client.LoginAsync(TokenType.Bot, Configuration["token"]);
                 await client.StartAsync();
 
                 await services.GetRequiredService<CommandHandlingService>().InitializeAsync();
 
                 await Task.Delay(-1);
             }
-        }
-
-        private Task LogAsync(LogMessage log)
-        {
-            Console.WriteLine(log.ToString());
-
-            return Task.CompletedTask;
         }
 
         private ServiceProvider ConfigureServices()
@@ -56,7 +53,9 @@ namespace DiscordBot
                 .AddSingleton<CommandService>()
                 .AddSingleton<CommandHandlingService>()
                 .AddSingleton<HttpClient>()
+                .AddSingleton<LoggingService>()
                 .AddSingleton(Configuration)
+                .AddLogging(configure => configure.AddSerilog())
                 .BuildServiceProvider();
         }
     }
